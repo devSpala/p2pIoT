@@ -1,0 +1,7 @@
+batch,sent,recv,loss_pct,median_ms,p95_ms,p99_ms,throughput_cps,transport,network,relayed
+10,10,10,0.00,9613.30,9667.10,9667.10,1.0,p2p-browser,cross-isp,1
+100,100,100,0.00,201.20,525.30,590.90,54.5,p2p-browser,cross-isp,1
+1000,1000,1000,0.00,167.10,1689.90,1959.10,67.7,p2p-browser,cross-isp,1
+2000,2000,2000,0.00,170.30,381.10,667.60,71.8,p2p-browser,cross-isp,1
+5000,5000,5000,0.00,160.20,239.50,366.70,69.0,p2p-browser,cross-isp,1
+10000,10000,10000,0.00,165.80,232.70,284.40,69.5,p2p-browser,cross-isp,1

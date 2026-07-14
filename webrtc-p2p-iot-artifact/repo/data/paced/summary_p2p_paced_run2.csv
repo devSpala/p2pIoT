@@ -1,0 +1,7 @@
+batch,sent,recv,loss_pct,median_ms,p95_ms,p99_ms,throughput_cps,transport,network
+10,10,10,0.00,21.60,54.00,54.00,46.7,p2p-browser,lan
+100,100,100,0.00,11.20,44.50,54.30,92.6,p2p-browser,lan
+1000,1000,1000,0.00,11.80,50.90,72.10,92.3,p2p-browser,lan
+2000,2000,2000,0.00,11.00,51.30,85.00,92.9,p2p-browser,lan
+5000,5000,5000,0.00,13.10,62.70,125.00,93.3,p2p-browser,lan
+10000,10000,10000,0.00,16.60,162.70,235.40,93.1,p2p-browser,lan

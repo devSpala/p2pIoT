@@ -1,6 +1,0 @@
-{
-  "name": "iot-experiment",
-  "version": "1.0.0",
-  "scripts": { "signal": "node server.js", "serve": "npx serve" },
-  "dependencies": { "ws": "^8.18.0" }
-}

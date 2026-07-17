@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 Cross-network (remote) analysis for the control-overlay paper.
-Builds the three-way regime figure and the relay sequence/CDF figures, and
-prints the LaTeX table rows, from the cross-ISP relay CSV.
+
+Now includes the LIKE-FOR-LIKE remote cloud baseline: both the P2P arm
+(relayed via public TURN) and the cloud arm (public MQTT broker) are measured
+with the gateway on cellular and the controller on Wi-Fi.
 
 Usage:
-  python analyze_xnet.py raw_p2p-browser_cross-isp_relay.csv
-Optional: pass LAN and cloud summary CSVs to overlay real baselines instead of
-the built-in constants:
-  python analyze_xnet.py raw_..._relay.csv summary_p2p_lan.csv summary_cloud.csv
+  python analyze_xnet.py raw_p2p-browser_cross-isp_relay.csv \
+                         raw_cloud-mqtt_cross-isp.csv
 Outputs -> ./figs_xnet/
 """
 import sys, os, csv
@@ -20,69 +20,68 @@ OUT="figs_xnet"; os.makedirs(OUT, exist_ok=True)
 plt.rcParams.update({"figure.dpi":130,"savefig.dpi":190,"font.size":11,
                      "axes.grid":True,"grid.alpha":0.3})
 B=[10,100,1000,2000,5000,10000]
-# built-in baselines (edit or override with summary CSVs)
-LAN={10:21.6,100:11.2,1000:11.8,2000:11.0,5000:13.1,10000:16.6}
-CLOUD={10:764.0,100:554.4,1000:473.3,2000:474.2,5000:472.2,10000:484.0}
+LAN_P2P={10:21.6,100:11.2,1000:11.8,2000:11.0,5000:13.1,10000:16.6}
+LAN_CLOUD={10:764.0,100:554.4,1000:473.3,2000:474.2,5000:472.2,10000:484.0}
 
-def load_raw(p):
-    r=list(csv.DictReader(open(p)))
+def med_by_batch(path):
+    r=list(csv.DictReader(open(path)))
     seq=np.array([int(x["seq"]) for x in r]); rtt=np.array([float(x["rtt_ms"]) for x in r])
-    o=np.argsort(seq); return seq[o],rtt[o]
-
-def med_by_batch(summary_path):
-    d={}
-    for row in csv.DictReader(open(summary_path)):
-        d[int(row["batch"])]=float(row["median_ms"])
-    return d
+    o=np.argsort(seq); rtt=rtt[o]; s=0; out={}; p99={}
+    for b in B:
+        seg=rtt[s:s+b]; out[b]=np.median(seg); p99[b]=np.percentile(seg,99); s+=b
+    return out, p99, rtt
 
 def main():
     args=[a for a in sys.argv[1:] if a.endswith(".csv")]
-    if not args: print(__doc__); sys.exit(1)
-    relay_raw=args[0]
-    lan, cloud = LAN, CLOUD
-    if len(args)>=3:
-        lan=med_by_batch(args[1]); cloud=med_by_batch(args[2])
-    sx,rx=load_raw(relay_raw)
-    o={}; s=0
-    for b in B: o[b]=(s,s+b); s+=b
-    xr={b:np.median(rx[o[b][0]:o[b][1]]) for b in B}
+    if len(args)<2:
+        print(__doc__); sys.exit(1)
+    p2p, p2p99, p2praw = med_by_batch(args[0])
+    cld, cld99, cldraw = med_by_batch(args[1])
 
-    # three-way
-    fig,ax=plt.subplots(figsize=(7.6,4.7))
-    ax.plot(B,[lan.get(b,np.nan) for b in B],"o-",color="#1f6f5c",lw=2,label="P2P direct — same-LAN")
-    ax.plot(B,[xr[b] for b in B],"^-",color="#2c7fb8",lw=2,label="P2P relay — cross-ISP (TURN)")
-    ax.plot(B,[cloud.get(b,np.nan) for b in B],"s-",color="#8e44ad",lw=2,label="Cloud — away (MQTT)")
+    # four-regime figure
+    fig,ax=plt.subplots(figsize=(7.6,4.9))
+    ax.plot(B,[LAN_P2P[b] for b in B],"o-",color="#1f6f5c",lw=2,
+            label="P2P direct — same-LAN (best case)")
+    ax.plot(B,[p2p[b] for b in B],"^-",color="#2c7fb8",lw=2,
+            label="P2P relay — cross-ISP via public TURN")
+    ax.plot(B,[cld[b] for b in B],"D-",color="#8e44ad",lw=2,
+            label="Cloud broker — cross-ISP (remote, measured)")
+    ax.plot(B,[LAN_CLOUD[b] for b in B],"s--",color="#c39bd3",lw=1.6,alpha=.8,
+            label="Cloud broker — same-LAN (reference)")
     ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xlabel("Batch size (commands)"); ax.set_ylabel("Median RTT (ms, log)")
-    ax.set_title("Three regimes: direct LAN vs relayed cross-ISP vs cloud")
-    ax.legend(fontsize=8.5); fig.tight_layout()
+    ax.set_xlabel("Batch size (commands)"); ax.set_ylabel("Median command RTT (ms, log)")
+    ax.set_title("Four regimes: direct LAN, relayed cross-ISP, cloud (remote vs LAN)")
+    ax.legend(fontsize=8); fig.tight_layout()
     fig.savefig(f"{OUT}/x1_threeway.png",bbox_inches="tight"); plt.close(fig)
 
-    # sequence
+    # like-for-like remote comparison
+    fig,ax=plt.subplots(figsize=(7,4.4))
+    ax.plot(B,[p2p[b] for b in B],"^-",color="#2c7fb8",lw=2,label="P2P relay (remote)")
+    ax.plot(B,[cld[b] for b in B],"D-",color="#8e44ad",lw=2,label="Cloud broker (remote)")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel("Batch size (commands)"); ax.set_ylabel("Median RTT (ms, log)")
+    ax.set_title("Like-for-like remote comparison: both endpoints cross-network")
+    ax.legend(fontsize=9); fig.tight_layout()
+    fig.savefig(f"{OUT}/x4_remote_fair.png",bbox_inches="tight"); plt.close(fig)
+
+    # relay sequence
     fig,ax=plt.subplots(figsize=(9,4.4))
-    ax.plot(np.arange(len(rx)),rx,".",ms=1.2,color="#2c7fb8",alpha=.5)
-    for b in B: ax.axvline(o[b][1],color="#ccc",lw=.6)
+    ax.plot(np.arange(len(p2praw)),p2praw,".",ms=1.2,color="#2c7fb8",alpha=.5)
+    s=0
+    for b in B: s+=b; ax.axvline(s,color="#ccc",lw=.6)
     ax.set_yscale("log"); ax.set_xlabel("Command sequence"); ax.set_ylabel("RTT (ms, log)")
     ax.set_title("Cross-ISP relay: setup spike, then stable")
     fig.tight_layout(); fig.savefig(f"{OUT}/x2_sequence.png",bbox_inches="tight"); plt.close(fig)
 
-    # steady CDF
     steady=[b for b in B if b!=10]
-    allsteady=np.concatenate([rx[o[b][0]:o[b][1]] for b in steady])
-    fig,ax=plt.subplots(figsize=(7,4.6))
-    x=np.sort(allsteady); y=np.arange(1,len(x)+1)/len(x)
-    ax.plot(x,y,color="#2c7fb8",lw=2); ax.axvline(np.median(x),color="#2c7fb8",ls="--",alpha=.6)
-    ax.set_xscale("log"); ax.set_xlabel("RTT (ms, log)"); ax.set_ylabel("CDF")
-    ax.set_title("Cross-ISP relay steady-state RTT")
-    fig.tight_layout(); fig.savefig(f"{OUT}/x3_cdf.png",bbox_inches="tight"); plt.close(fig)
-
-    print("% LaTeX rows (batch, median, p95, p99, cps):")
+    print("=== LIKE-FOR-LIKE REMOTE (both cross-network) ===")
+    print(f"{'batch':>6} {'P2P relay':>10} {'Cloud remote':>13} {'ratio':>7}")
     for b in B:
-        seg=rx[o[b][0]:o[b][1]]
-        print(f"{b:<6} & {np.median(seg):.1f} & {np.percentile(seg,95):.1f} & "
-              f"{np.percentile(seg,99):.1f} & --- \\\\")
-    xs=np.median([xr[b] for b in steady]); cs=np.median([cloud[b] for b in steady])
-    print(f"\nsteady relay median {xs:.1f} ms vs cloud {cs:.1f} ms ({cs/xs:.1f}x)")
+        tag=' (cold-start)' if b==10 else ''
+        print(f"{b:>6} {p2p[b]:9.1f} {cld[b]:12.1f} {cld[b]/p2p[b]:6.1f}x{tag}")
+    pr=np.median([p2p[b] for b in steady]); cr=np.median([cld[b] for b in steady])
+    print(f"\nSTEADY (excl batch-10): P2P {pr:.0f} ms | cloud {cr:.0f} ms | {cr/pr:.1f}x")
+    print(f"same-LAN cloud reference: {np.median([LAN_CLOUD[b] for b in steady]):.0f} ms")
     print(f"figures -> ./{OUT}/")
 
 if __name__=="__main__": main()
